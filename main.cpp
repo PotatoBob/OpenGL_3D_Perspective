@@ -1,3 +1,4 @@
+
 #include "SDL2/SDL.h"
 #include "OpenGL/gl3.h"
 
@@ -22,6 +23,9 @@ int main(int argc, char** argv){
     srand(time(0));
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow("OpenGL", 100, 100, WIDTH, HEIGHT, SDL_WINDOW_OPENGL);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GLContext context = SDL_GL_CreateContext(window);
 
     char* vertexData = readFileToCharArray("vertex_shader.glsl");
@@ -31,10 +35,12 @@ int main(int argc, char** argv){
     glUseProgram(shader);
     int postionId = glGetAttribLocation(shader, "position");
     int texCoordId = glGetAttribLocation(shader, "texCoord");
+    int normalId = glGetAttribLocation(shader, "normal");
 
     int modelMatId = glGetUniformLocation(shader, "modelMatrix");
     int projectionMatId = glGetUniformLocation(shader, "projectionMatrix");
     int viewMatId = glGetUniformLocation(shader, "viewMatrix");
+    int lightPosId = glGetUniformLocation(shader, "lightPosition");
 
 
     Camera camera;
@@ -52,9 +58,53 @@ int main(int argc, char** argv){
     glUniformMatrix4fv(viewMatId, 1, false, viewMatrix.m[0]);
 
     float verts[] = {
-        -1, -1, 0, 0, 1, 
-        0, 1, 0, 0.5, 0,
-        1, -1, 0, 1, 1,
+        //front
+        -1, -1, 1,  0, 1,  0, 0, -1,
+        -1,  1, 1,   0, 0, 0, 0, -1,
+         1,  1, 1,   1, 0, 0, 0, -1,
+         1,  1, 1,   1, 0, 0, 0, -1,
+         1, -1, 1,  1, 1, 0, 0, -1,
+        -1, -1, 1,  0, 1, 0, 0, -1,
+
+        //back
+        -1, 1, -1,  0, 1,   0, 0, 1,
+        -1,  -1, -1,   0, 0,  0, 0, 1,
+        1,   -1, -1,   1, 0, 0, 0, 1,
+        1,   -1, -1,   1, 0, 0, 0, 1,
+        1,  1, -1,  1, 1, 0, 0, 1,
+        -1, 1, -1,  0, 1, 0, 0, 1,
+
+        //left
+        -1, -1, -1, 0, 1, -1, 0, 0,
+        -1, 1, -1, 0, 0,    -1, 0, 0,
+        -1, 1, 1, 1, 0, -1, 0, 0,
+        -1, 1, 1, 1, 0, -1, 0, 0,
+        -1, -1, 1, 1, 1, -1, 0, 0,
+        -1, -1, -1, 0, 1,  -1, 0, 0,
+
+        //right
+        1, 1, -1, 0, 1,  1, 0, 0,
+        1, -1, -1, 0, 0,  1, 0, 0,
+        1, -1, 1, 1, 0, 1, 0, 0,
+        1, -1, 1, 1, 0, 1, 0, 0,
+        1, 1, 1, 1, 1, 1, 0, 0,
+        1, 1, -1, 0, 1,  1, 0, 0,
+
+        //top
+        1, 1, -1, 0, 1, 0, 1, 0,
+        1, 1, 1, 0, 0,  0, 1, 0,
+        -1, 1, 1, 1, 0, 0, 1, 0,
+        -1, 1, 1, 1, 0, 0, 1, 0,
+        -1, 1, -1, 1, 1, 0, 1, 0,
+        1, 1, -1, -0, 1, 0, 1, 0,
+
+        //bottom
+        -1, -1, -1, 0, 1, 0, -1, 0,
+        -1, -1, 1, 0, 0,  0, -1, 0,
+        1,  -1, 1, 1, 0, 0, -1, 0,
+        1,  -1, 1, 1, 0, 0, -1, 0,
+        1,  -1, -1, 1, 1, 0, -1, 0,
+        -1, -1, -1, -0, 1, 0, -1, 0,
     };
 
     unsigned int vao, vbo;
@@ -64,10 +114,12 @@ int main(int argc, char** argv){
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(postionId, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
+    glVertexAttribPointer(postionId, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), 0);
     glEnableVertexAttribArray(postionId);
-    glVertexAttribPointer(texCoordId, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(texCoordId, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(texCoordId);
+    glVertexAttribPointer(normalId, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
+    glEnableVertexAttribArray(normalId);
 
     unsigned char texture[] = {
         255,255,255,255,0,0,0,255,
@@ -84,6 +136,10 @@ int main(int argc, char** argv){
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture); 
 
     glClearColor(0, 0.5, 1, 1);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glFrontFace(GL_CW);
+    glCullFace(GL_BACK);
 
     mat4 modelMatrix;
     modelMatrix.setIdentity();
@@ -110,6 +166,10 @@ int main(int argc, char** argv){
 
     float camMoveSpeed = 0.1;
     float camRotateSpeed = 0.01;
+
+    float lightX = 0;
+    float lightY = 0;
+    float lightZ = 0;
 
     while(isRunning){
         while(SDL_PollEvent(&event)){
@@ -184,7 +244,7 @@ int main(int argc, char** argv){
                 }
             }
         }
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         camera.position -= vec3(camera.forward.x * camMoveSpeed * moveForward,
                                 camera.forward.y * camMoveSpeed * moveForward,
@@ -202,6 +262,14 @@ int main(int argc, char** argv){
                                 camera.right.y * camMoveSpeed * moveLeft,
                                 camera.right.z * camMoveSpeed * moveLeft);
 
+        camera.position -= vec3(camera.up.x * camMoveSpeed * moveUp,
+                                camera.up.y * camMoveSpeed * moveUp,
+                                camera.up.z * camMoveSpeed * moveUp);
+            
+        camera.position += vec3(camera.up.x * camMoveSpeed * moveDown,
+                                camera.up.y * camMoveSpeed * moveDown,
+                                camera.up.z * camMoveSpeed * moveDown);
+
         camera.orientation.rotate(camera.right, -camRotateSpeed * pitchUp);
         camera.orientation.rotate(camera.right, camRotateSpeed * pitchDown);
         camera.orientation.rotate(camera.up, -camRotateSpeed * yawLeft);
@@ -218,7 +286,11 @@ int main(int argc, char** argv){
         viewMatrix = multiply(quatToMat4(camera.orientation), viewMatrix);
         glUniformMatrix4fv(viewMatId, 1, false, viewMatrix.m[0]);
 
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        lightX += 0.1;
+        lightY += 0.1;
+        glUniform3f(lightPosId, sin(lightX), 0, sin(lightZ));
+
+        glDrawArrays(GL_TRIANGLES, 0, 36);
 
         SDL_GL_SwapWindow(window);
     }
